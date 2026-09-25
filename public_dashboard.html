@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Báo Cáo Least Privilege & An Toàn AWS IAM</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --critical: #ef4444;
+            --high: #f97316;
+            --medium: #f59e0b;
+            --low: #3b82f6;
+            --success: #10b981;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 24px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            color: #ffffff;
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 28px;
+        }
+        header h1 {
+            margin: 0 0 12px 0;
+            font-size: 26px;
+            font-weight: 700;
+        }
+        header .meta {
+            font-size: 14px;
+            color: #94a3b8;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            border-left-width: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .stat-card.stat-critical { border-left-color: var(--critical); }
+        .stat-card.stat-high { border-left-color: var(--high); }
+        .stat-card.stat-medium { border-left-color: var(--medium); }
+        .stat-card.stat-low { border-left-color: var(--low); }
+        .stat-number {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .stat-critical .stat-number { color: var(--critical); }
+        .stat-high .stat-number { color: var(--high); }
+        .stat-medium .stat-number { color: var(--medium); }
+        .stat-low .stat-number { color: var(--low); }
+        .stat-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin: 32px 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .principal-card {
+            background: var(--card-bg);
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .card-header {
+            background: #f1f5f9;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .principal-name {
+            font-size: 18px;
+            font-weight: 700;
+            margin-left: 8px;
+        }
+        .principal-arn {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            background: #ffffff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .meta-section {
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .source-list {
+            margin: 6px 0 0 0;
+            padding-left: 20px;
+            color: #334155;
+        }
+        .alert-box {
+            padding: 14px 18px;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            font-size: 14px;
+        }
+        .alert-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .alert-critical {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+        .alert-warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+        }
+        .alert-purple {
+            background: #faf5ff;
+            border: 1px solid #e9d5ff;
+            color: #6b21a8;
+        }
+        .alert-gray {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+        }
+        .alert-blue {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+        .vuln-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .vuln-list li {
+            margin-bottom: 4px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .badge-user { background: #dbeafe; color: #1e40af; }
+        .badge-role { background: #f3e8ff; color: #6b21a8; }
+        .badge-critical { background: #fee2e2; color: #b91c1c; }
+        .badge-high { background: #ffedd5; color: #c2410c; }
+        .badge-low { background: #e0f2fe; color: #0369a1; }
+        .pill-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 8px 0;
+        }
+        .pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .pill-never { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .pill-deny { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+        .text-muted {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 4px 0 0 0;
+        }
+        code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        footer {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛡️ Báo Cáo Least Privilege & An Toàn AWS IAM</h1>
+            <div class="meta">
+                <span>🕒 Thời gian quét: <strong>2026-09-21T04:34:20.792646+00:00</strong></span>
+                <span>📂 Nguồn: <strong>live-account (profile=default)</strong></span>
+                <span>⚙️ Giai đoạn: <strong>stage1_static_analysis, stage2_access_advisor</strong></span>
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-critical">
+                <div class="stat-number">30</div>
+                <div class="stat-label">Critical</div>
+                <div class="stat-desc">Nguy cơ chiếm toàn quyền Admin ngay lập tức</div>
+            </div>
+            <div class="stat-card stat-high">
+                <div class="stat-number">27</div>
+                <div class="stat-label">High</div>
+                <div class="stat-desc">Quyền Wildcard hoặc Resource:* trên thao tác xóa</div>
+            </div>
+            <div class="stat-card stat-medium">
+                <div class="stat-number">1066</div>
+                <div class="stat-label">Medium</div>
+                <div class="stat-desc">Dịch vụ mở quyền nhưng chưa từng được sử dụng</div>
+            </div>
+            <div class="stat-card stat-low">
+                <div class="stat-number">59</div>
+                <div class="stat-label">Low</div>
+                <div class="stat-desc">Dịch vụ không phát sinh lệnh gọi > 90 ngày</div>
+            </div>
+        </div>
+
+        <div class="section-title">🔍 Chi Tiết Các Đối Tượng Cần Điều Chỉnh (16 Đối Tượng)</div>
+
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-user">USER</span>
+                    <span class="principal-name">👤 admin-user-01</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:user/admin-user-01</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Kế thừa từ Group <strong>AdminGroup-Demo</strong> ➔ Policy <code>AdministratorAccess</code></li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-critical">
+                <div class="alert-title">🚨 NGUY CƠ LEO THANG ĐẶC QUYỀN ADMIN (14 kịch bản)</div>
+                <ul class="vuln-list"><li><span class='badge badge-critical'>CRITICAL</span> <strong>CreatePolicyVersion</strong>: Create new policy version with elevated privileges</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>SetDefaultPolicyVersion</strong>: Set a previously created permissive policy version as default</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+Lambda</strong>: Pass privileged role to Lambda and invoke it</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+EC2</strong>: Launch EC2 with privileged instance profile</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+CloudFormation</strong>: Deploy CloudFormation stack with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachUserPolicy</strong>: Attach AdministratorAccess to own user</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachGroupPolicy</strong>: Attach AdministratorAccess to own group</li><li><span class='badge badge-high'>HIGH</span> <strong>AttachRolePolicy</strong>: Attach elevated policy to assumable role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PutUserPolicy</strong>: Add inline policy to own user</li><li><span class='badge badge-high'>HIGH</span> <strong>PutGroupPolicy</strong>: Add inline policy to own group</li><li><span class='badge badge-high'>MEDIUM</span> <strong>AssumeRole</strong>: Assume role with higher privileges</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+SageMaker</strong>: Create SageMaker notebook with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>UpdateAssumeRolePolicy</strong>: Modify trust policy to assume privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+SSM</strong>: Execute commands on EC2 via SSM with privileged role</li></ul>
+            </div>
+            
+                
+            <div class="alert-box alert-warning">
+                <div class="alert-title">⚠️ CẤP QUYỀN TOÀN PHẦN (WILDCARD)</div>
+                <ul class="vuln-list"><li>Action <code>*</code>: Wildcard action &#x27;*&#x27; grants broad access</li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 150 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS App2Container</span><span class='pill pill-never'>Alexa for Business</span><span class='pill pill-never'>Account access manager</span><span class='pill pill-never'>AWS Certificate Manager</span><span class='pill pill-never'>AWS Private Certificate Authority</span><span class='pill pill-never'>AWS Compute Optimizer Automation</span><span class='pill pill-never'>AWS Activate</span><span class='pill pill-never'>AWS Agent Registry</span><span class='pill pill-never'>Amazon WorkSpaces AgentAccess MCP Server</span><span class='pill pill-never'>AWS DevOps Agent Service</span><span class='pill pill-never'>Amazon AI Operations</span><span class='pill pill-never'>Amazon Managed Workflows for Apache Airflow</span></div>
+                <span class='text-muted'>+ 138 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            <div class="alert-box alert-blue">
+                <div class="alert-title">⏳ DỊCH VỤ BỎ HOANG (>90 ngày): 21 dịch vụ</div>
+                <ul class="vuln-list"><li>AWS Action Recommendations <span class='badge badge-low'>không dùng 117 ngày</span></li><li>Manage - Amazon API Gateway <span class='badge badge-low'>không dùng 146 ngày</span></li><li>Amazon CloudWatch Application Insights <span class='badge badge-low'>không dùng 116 ngày</span></li><li>Amazon Application Recovery Controller - Zonal Shift <span class='badge badge-low'>không dùng 110 ngày</span></li><li>AWS Billing Console <span class='badge badge-low'>không dùng 116 ngày</span></li><li>AWS Billing and Cost Management Dashboards <span class='badge badge-low'>không dùng 116 ngày</span></li></ul>
+            </div>
+            
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-user">USER</span>
+                    <span class="principal-name">👤 test-user-02</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:user/test-user-02</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AdministratorAccess</code></li><li>Gắn trực tiếp ➔ Policy <code>IAMUserChangePassword</code></li><li>Gắn trực tiếp ➔ Policy <code>AdministratorAccess-AWSElasticBeanstalk</code></li><li>Gắn trực tiếp ➔ Policy <code>AdministratorAccess-Amplify</code></li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-critical">
+                <div class="alert-title">🚨 NGUY CƠ LEO THANG ĐẶC QUYỀN ADMIN (14 kịch bản)</div>
+                <ul class="vuln-list"><li><span class='badge badge-critical'>CRITICAL</span> <strong>CreatePolicyVersion</strong>: Create new policy version with elevated privileges</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>SetDefaultPolicyVersion</strong>: Set a previously created permissive policy version as default</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+Lambda</strong>: Pass privileged role to Lambda and invoke it</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+EC2</strong>: Launch EC2 with privileged instance profile</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+CloudFormation</strong>: Deploy CloudFormation stack with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachUserPolicy</strong>: Attach AdministratorAccess to own user</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachGroupPolicy</strong>: Attach AdministratorAccess to own group</li><li><span class='badge badge-high'>HIGH</span> <strong>AttachRolePolicy</strong>: Attach elevated policy to assumable role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PutUserPolicy</strong>: Add inline policy to own user</li><li><span class='badge badge-high'>HIGH</span> <strong>PutGroupPolicy</strong>: Add inline policy to own group</li><li><span class='badge badge-high'>MEDIUM</span> <strong>AssumeRole</strong>: Assume role with higher privileges</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+SageMaker</strong>: Create SageMaker notebook with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>UpdateAssumeRolePolicy</strong>: Modify trust policy to assume privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+SSM</strong>: Execute commands on EC2 via SSM with privileged role</li></ul>
+            </div>
+            
+                
+            <div class="alert-box alert-warning">
+                <div class="alert-title">⚠️ CẤP QUYỀN TOÀN PHẦN (WILDCARD)</div>
+                <ul class="vuln-list"><li>Action <code>*</code>: Wildcard action &#x27;*&#x27; grants broad access</li></ul>
+            </div>
+            
+                
+            <div class="alert-box alert-purple">
+                <div class="alert-title">🎯 PHẠM VI TÀI NGUYÊN QUÁ RỘNG (Resource: * trên thao tác nhạy cảm - 10 quyền)</div>
+                <ul class="vuln-list"><li><code>dynamodb:deleteitem</code>: Sensitive action &#x27;dynamodb:deleteitem&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>s3:putobject</code>: Sensitive action &#x27;s3:putobject&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>lambda:updatefunctioncode</code>: Sensitive action &#x27;lambda:updatefunctioncode&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>dynamodb:deletetable</code>: Sensitive action &#x27;dynamodb:deletetable&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>lambda:deletefunction</code>: Sensitive action &#x27;lambda:deletefunction&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>s3:deletebucket</code>: Sensitive action &#x27;s3:deletebucket&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>sqs:deletequeue</code>: Sensitive action &#x27;sqs:deletequeue&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>s3:deleteobject</code>: Sensitive action &#x27;s3:deleteobject&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>s3:getobject</code>: Sensitive action &#x27;s3:getobject&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>dynamodb:putitem</code>: Sensitive action &#x27;dynamodb:putitem&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li></ul>
+                
+            </div>
+            
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 200 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS App2Container</span><span class='pill pill-never'>Alexa for Business</span><span class='pill pill-never'>AWS IAM Access Analyzer</span><span class='pill pill-never'>AWS Account Management</span><span class='pill pill-never'>Account access manager</span><span class='pill pill-never'>AWS Certificate Manager</span><span class='pill pill-never'>AWS Private Certificate Authority</span><span class='pill pill-never'>AWS Compute Optimizer Automation</span><span class='pill pill-never'>AWS Action Recommendations</span><span class='pill pill-never'>AWS Activate</span><span class='pill pill-never'>AWS Agent Registry</span><span class='pill pill-never'>Amazon WorkSpaces AgentAccess MCP Server</span></div>
+                <span class='text-muted'>+ 188 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AgentCore-AgentCoreProjec-ApplicationAgentCustomerA-XXXXXXXXXXXX</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/AgentCore-AgentCoreProjec-ApplicationAgentCustomerA-XXXXXXXXXXXX</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>ApplicationAgentCustomerAssistantAgentRuntimeExecutionRoleDefaultPolicyXXXXXXXX</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 1 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon Bedrock Agentcore</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForAccessAnalyzer</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/access-analyzer.amazonaws.com/AWSServiceRoleForAccessAnalyzer</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AccessAnalyzerServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 1 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS Organizations</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForCloudWatchApplicationSignals</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/application-signals.cloudwatch.amazonaws.com/AWSServiceRoleForCloudWatchApplicationSignals</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>CloudWatchApplicationSignalsServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 6 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon CloudWatch Application Signals</span><span class='pill pill-never'>Amazon EC2 Auto Scaling</span><span class='pill pill-never'>AWS CloudTrail</span><span class='pill pill-never'>Amazon CloudWatch</span><span class='pill pill-never'>Amazon CloudWatch Logs</span><span class='pill pill-never'>Amazon Resource Group Tagging API</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForECS</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AmazonECSServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 6 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon EC2 Auto Scaling</span><span class='pill pill-never'>AWS Auto Scaling</span><span class='pill pill-never'>Amazon CloudWatch</span><span class='pill pill-never'>Amazon EventBridge</span><span class='pill pill-never'>Amazon CloudWatch Logs</span><span class='pill pill-never'>AWS Systems Manager</span></div>
+                
+            </div>
+            
+                
+            <div class="alert-box alert-blue">
+                <div class="alert-title">⏳ DỊCH VỤ BỎ HOANG (>90 ngày): 2 dịch vụ</div>
+                <ul class="vuln-list"><li>Amazon Route 53 <span class='badge badge-low'>không dùng 110 ngày</span></li><li>AWS Cloud Map <span class='badge badge-low'>không dùng 110 ngày</span></li></ul>
+            </div>
+            
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForElasticLoadBalancing</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AWSElasticLoadBalancingServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 2 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon CloudWatch Logs</span><span class='pill pill-never'>AWS Outposts</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForRDS</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AmazonRDSServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 4 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon Kinesis Data Streams</span><span class='pill pill-never'>Amazon CloudWatch Logs</span><span class='pill pill-never'>Amazon RDS</span><span class='pill pill-never'>AWS Secrets Manager</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForResourceExplorer</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/resource-explorer-2.amazonaws.com/AWSServiceRoleForResourceExplorer</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AWSResourceExplorerServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 62 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS Amplify UI Builder</span><span class='pill pill-never'>AWS Application Auto Scaling</span><span class='pill pill-never'>Amazon CloudWatch Application Signals</span><span class='pill pill-never'>Amazon CloudWatch Application Insights</span><span class='pill pill-never'>AWS Mainframe Modernization Application Testing</span><span class='pill pill-never'>Amazon ARC Region switch</span><span class='pill pill-never'>Amazon Application Recovery Controller - Zonal Shift</span><span class='pill pill-never'>AWS B2B Data Interchange</span><span class='pill pill-never'>AWS Billing and Cost Management Dashboards</span><span class='pill pill-never'>AWS Billing And Cost Management Data Exports</span><span class='pill pill-never'>AWS Billing</span><span class='pill pill-never'>AWS Chatbot</span></div>
+                <span class='text-muted'>+ 50 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            <div class="alert-box alert-blue">
+                <div class="alert-title">⏳ DỊCH VỤ BỎ HOANG (>90 ngày): 36 dịch vụ</div>
+                <ul class="vuln-list"><li>AWS Certificate Manager <span class='badge badge-low'>không dùng 127 ngày</span></li><li>Amazon Managed Workflows for Apache Airflow <span class='badge badge-low'>không dùng 102 ngày</span></li><li>Amazon AppFlow <span class='badge badge-low'>không dùng 134 ngày</span></li><li>AWS AppSync <span class='badge badge-low'>không dùng 132 ngày</span></li><li>Amazon Managed Service for Prometheus <span class='badge badge-low'>không dùng 123 ngày</span></li><li>AWS Audit Manager <span class='badge badge-low'>không dùng 96 ngày</span></li></ul>
+            </div>
+            
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForSupport</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/support.amazonaws.com/AWSServiceRoleForSupport</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AWSSupportServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 200 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS IAM Access Analyzer</span><span class='pill pill-never'>AWS Account Management</span><span class='pill pill-never'>AWS Certificate Manager</span><span class='pill pill-never'>AWS Private Certificate Authority</span><span class='pill pill-never'>AWS DevOps Agent Service</span><span class='pill pill-never'>Amazon AI Operations</span><span class='pill pill-never'>Amazon Managed Workflows for Apache Airflow</span><span class='pill pill-never'>AWS MWAA Serverless</span><span class='pill pill-never'>AWS Amplify</span><span class='pill pill-never'>AWS Amplify UI Builder</span><span class='pill pill-never'>Amazon OpenSearch Serverless</span><span class='pill pill-never'>Manage - Amazon API Gateway</span></div>
+                <span class='text-muted'>+ 188 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ AWSServiceRoleForTrustedAdvisor</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/aws-service-role/trustedadvisor.amazonaws.com/AWSServiceRoleForTrustedAdvisor</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AWSTrustedAdvisorServiceRolePolicy</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 24 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS IAM Access Analyzer</span><span class='pill pill-never'>Amazon EC2 Auto Scaling</span><span class='pill pill-never'>AWS Cost Explorer Service</span><span class='pill pill-never'>AWS CloudFormation</span><span class='pill pill-never'>Amazon CloudFront</span><span class='pill pill-never'>AWS CloudTrail</span><span class='pill pill-never'>Amazon CloudWatch</span><span class='pill pill-never'>Amazon DynamoDB Accelerator (DAX)</span><span class='pill pill-never'>Amazon DynamoDB</span><span class='pill pill-never'>Amazon EC2</span><span class='pill pill-never'>Amazon Elastic Container Service</span><span class='pill pill-never'>Elastic Load Balancing</span></div>
+                <span class='text-muted'>+ 12 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ cdk-demo12345-cfn-exec-role-123456789012-ap-southeast-1</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/cdk-demo12345-cfn-exec-role-123456789012-ap-southeast-1</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AdministratorAccess</code></li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-critical">
+                <div class="alert-title">🚨 NGUY CƠ LEO THANG ĐẶC QUYỀN ADMIN (14 kịch bản)</div>
+                <ul class="vuln-list"><li><span class='badge badge-critical'>CRITICAL</span> <strong>CreatePolicyVersion</strong>: Create new policy version with elevated privileges</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>SetDefaultPolicyVersion</strong>: Set a previously created permissive policy version as default</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+Lambda</strong>: Pass privileged role to Lambda and invoke it</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+EC2</strong>: Launch EC2 with privileged instance profile</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+CloudFormation</strong>: Deploy CloudFormation stack with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachUserPolicy</strong>: Attach AdministratorAccess to own user</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>AttachGroupPolicy</strong>: Attach AdministratorAccess to own group</li><li><span class='badge badge-high'>HIGH</span> <strong>AttachRolePolicy</strong>: Attach elevated policy to assumable role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PutUserPolicy</strong>: Add inline policy to own user</li><li><span class='badge badge-high'>HIGH</span> <strong>PutGroupPolicy</strong>: Add inline policy to own group</li><li><span class='badge badge-high'>MEDIUM</span> <strong>AssumeRole</strong>: Assume role with higher privileges</li><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+SageMaker</strong>: Create SageMaker notebook with privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>UpdateAssumeRolePolicy</strong>: Modify trust policy to assume privileged role</li><li><span class='badge badge-critical'>CRITICAL</span> <strong>PassRole+SSM</strong>: Execute commands on EC2 via SSM with privileged role</li></ul>
+            </div>
+            
+                
+            <div class="alert-box alert-warning">
+                <div class="alert-title">⚠️ CẤP QUYỀN TOÀN PHẦN (WILDCARD)</div>
+                <ul class="vuln-list"><li>Action <code>*</code>: Wildcard action &#x27;*&#x27; grants broad access</li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 198 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS App2Container</span><span class='pill pill-never'>Alexa for Business</span><span class='pill pill-never'>AWS IAM Access Analyzer</span><span class='pill pill-never'>AWS Account Management</span><span class='pill pill-never'>Account access manager</span><span class='pill pill-never'>AWS Certificate Manager</span><span class='pill pill-never'>AWS Private Certificate Authority</span><span class='pill pill-never'>AWS Compute Optimizer Automation</span><span class='pill pill-never'>AWS Action Recommendations</span><span class='pill pill-never'>AWS Activate</span><span class='pill pill-never'>AWS Agent Registry</span><span class='pill pill-never'>Amazon WorkSpaces AgentAccess MCP Server</span></div>
+                <span class='text-muted'>+ 186 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ cdk-demo12345-deploy-role-123456789012-ap-southeast-1</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/cdk-demo12345-deploy-role-123456789012-ap-southeast-1</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>default</code></li><li>Gắn trực tiếp ➔ Policy <code>AWSCloudFormationReadOnlyAccess</code></li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-critical">
+                <div class="alert-title">🚨 NGUY CƠ LEO THANG ĐẶC QUYỀN ADMIN (1 kịch bản)</div>
+                <ul class="vuln-list"><li><span class='badge badge-high'>HIGH</span> <strong>PassRole+CloudFormation</strong>: Deploy CloudFormation stack with privileged role</li></ul>
+            </div>
+            
+                
+                
+            <div class="alert-box alert-purple">
+                <div class="alert-title">🎯 PHẠM VI TÀI NGUYÊN QUÁ RỘNG (Resource: * trên thao tác nhạy cảm - 2 quyền)</div>
+                <ul class="vuln-list"><li><code>kms:encrypt</code>: Sensitive action &#x27;kms:encrypt&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>kms:decrypt</code>: Sensitive action &#x27;kms:decrypt&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li></ul>
+                
+            </div>
+            
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 2 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>AWS Identity and Access Management</span><span class='pill pill-never'>AWS Security Token Service</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ cdk-demo12345-image-publishing-role-123456789012-ap-southeast-1</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/cdk-demo12345-image-publishing-role-123456789012-ap-southeast-1</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>cdk-demo12345-image-publishing-role-default-policy-123456789012-ap-southeast-1</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 1 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon Elastic Container Registry</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ cdk-demo12345-lookup-role-123456789012-ap-southeast-1</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/cdk-demo12345-lookup-role-123456789012-ap-southeast-1</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>LookupRolePolicy</code></li><li>Gắn trực tiếp ➔ Policy <code>ReadOnlyAccess</code></li></ul>
+            </div>
+            
+                
+            <div class="meta-section">
+                <strong>⛔ Quyền bị chặn tường minh (Explicit Deny):</strong>
+                <div class="pill-container"><span class='pill pill-deny'>kms:decrypt</span></div>
+            </div>
+            
+                
+                
+                
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 199 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Alexa for Business</span><span class='pill pill-never'>AWS IAM Access Analyzer</span><span class='pill pill-never'>AWS Account Management</span><span class='pill pill-never'>AWS Certificate Manager</span><span class='pill pill-never'>AWS Private Certificate Authority</span><span class='pill pill-never'>AWS Action Recommendations</span><span class='pill pill-never'>AWS DevOps Agent Service</span><span class='pill pill-never'>Amazon AI Operations</span><span class='pill pill-never'>Amazon Managed Workflows for Apache Airflow</span><span class='pill pill-never'>AWS Amplify</span><span class='pill pill-never'>Amazon OpenSearch Serverless</span><span class='pill pill-never'>Manage - Amazon API Gateway</span></div>
+                <span class='text-muted'>+ 187 dịch vụ khác cần gỡ bỏ khỏi policy.</span>
+            </div>
+            
+                
+            </div>
+        </div>
+        
+        <div class="principal-card">
+            <div class="card-header">
+                <div>
+                    <span class="badge badge-role">ROLE</span>
+                    <span class="principal-name">🛡️ CodeDeployServiceRole</span>
+                </div>
+                <div class="principal-arn">arn:aws:iam::123456789012:role/CodeDeployServiceRole</div>
+            </div>
+            <div class="card-body">
+                
+            <div class="meta-section">
+                <strong>📌 Nguồn cấp quyền:</strong>
+                <ul class="source-list"><li>Gắn trực tiếp ➔ Policy <code>AWSCodeDeployRoleForECS</code></li></ul>
+            </div>
+            
+                
+                
+                
+                
+            <div class="alert-box alert-purple">
+                <div class="alert-title">🎯 PHẠM VI TÀI NGUYÊN QUÁ RỘNG (Resource: * trên thao tác nhạy cảm - 2 quyền)</div>
+                <ul class="vuln-list"><li><code>s3:getobject</code>: Sensitive action &#x27;s3:getobject&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li><li><code>sns:publish</code>: Sensitive action &#x27;sns:publish&#x27; uses Resource: &#x27;*&#x27; - should be scoped to specific ARNs</li></ul>
+                
+            </div>
+            
+                
+            <div class="alert-box alert-gray">
+                <div class="alert-title">❌ DƯ THỪA (CHƯA TỪNG SỬ DỤNG): 7 dịch vụ</div>
+                <div class="pill-container"><span class='pill pill-never'>Amazon CloudWatch</span><span class='pill pill-never'>Amazon Elastic Container Service</span><span class='pill pill-never'>Elastic Load Balancing</span><span class='pill pill-never'>AWS Identity and Access Management</span><span class='pill pill-never'>AWS Lambda</span><span class='pill pill-never'>Amazon S3</span><span class='pill pill-never'>Amazon SNS</span></div>
+                
+            </div>
+            
+                
+            </div>
+        </div>
+        
+
+        <footer>
+            Báo cáo được sinh tự động bởi <strong>AWS IAM Least Privilege Analyzer (scan.py & summarize.py)</strong>.
+        </footer>
+    </div>
+</body>
+</html>
