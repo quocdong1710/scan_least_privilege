@@ -1,3 +1,4 @@
+# Source : Anthropic-Cybersecurity-Skills
 # AWS IAM Least Privilege & Privilege Escalation Analyzer (`scan.py`)
 
 Công cụ phân tích bảo mật chuyên sâu cho AWS IAM, kết hợp giữa **Phân tích tĩnh cấu hình quyền (Static Policy Analysis)** và **Phân tích động lịch sử truy cập (Dynamic Access Advisor Analysis)** nhằm phát hiện các đường dẫn leo thang đặc quyền (Privilege Escalation) và các vi phạm nguyên tắc đặc quyền tối thiểu (Least Privilege).
